@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════
+# Render.com Deployment Configuration
+# ═══════════════════════════════════════════════════════════
+
+services:
+  # Discord Bot Service
+  - type: web
+    name: luashield-bot
+    env: node
+    region: singapore  # Pilih region terdekat
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    
+    # Health Check (untuk keep alive)
+    healthCheckPath: /health
+    
+    # Environment Variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DISCORD_TOKEN
+        sync: false  # Set manual di Render dashboard
+      - key: CLIENT_ID
+        sync: false
+      - key: GUILD_ID
+        sync: false
+    
+    # Auto Deploy
+    autoDeploy: true
+    
+    # Branch
+    branch: main
