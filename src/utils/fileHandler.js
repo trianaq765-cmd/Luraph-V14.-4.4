@@ -56,6 +56,30 @@ class FileHandler {
     }
 
     /**
+     * Process Discord attachment
+     */
+    async processAttachment(attachment) {
+        // Validate file type
+        if (!attachment.name.endsWith('.lua') && !attachment.name.endsWith('.txt')) {
+            throw new Error('Only .lua or .txt files are allowed');
+        }
+
+        // Validate size
+        if (attachment.size > this.maxFileSize) {
+            throw new Error(`File too large. Max: ${Math.floor(this.maxFileSize / 1024)}KB`);
+        }
+
+        // Download content
+        const content = await this.downloadFromUrl(attachment.url);
+        
+        return {
+            content,
+            filename: attachment.name,
+            size: attachment.size
+        };
+    }
+
+    /**
      * Save string to temporary file
      */
     saveTempFile(content, extension = '.lua') {
@@ -142,7 +166,6 @@ class FileHandler {
         const openBrackets = (content.match(/\bfunction\b/g) || []).length;
         const closeBrackets = (content.match(/\bend\b/g) || []).length;
         
-        // This is a very rough check - real validation happens in parser
         if (openBrackets > closeBrackets + 5) {
             errors.push('Possible syntax error: unmatched function/end blocks');
         }
@@ -154,7 +177,20 @@ class FileHandler {
     }
 
     /**
-     * Create Buffer from content for Discord attachment
+     * Create Discord attachment buffer
+     */
+    createAttachment(content, originalName = 'script') {
+        const baseName = originalName.replace(/\.(lua|txt)$/i, '');
+        const filename = `${baseName}_obfuscated.lua`;
+
+        return {
+            attachment: Buffer.from(content, 'utf-8'),
+            name: filename
+        };
+    }
+
+    /**
+     * Create Buffer from content (legacy support)
      */
     createBuffer(content, filename = 'obfuscated.lua') {
         return {
