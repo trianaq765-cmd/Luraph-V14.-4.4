@@ -1,7 +1,7 @@
 /**
  * LuaShield - Obfuscate Command
  * Support: Roblox Executor, Loadstring, Standard Lua
- * Input: File Upload (.lua/.txt) atau Raw Code Paste
+ * FIXED VERSION - Proper interaction handling
  */
 
 const {
@@ -12,9 +12,6 @@ const {
     ButtonStyle,
     EmbedBuilder,
     AttachmentBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
     ComponentType
 } = require('discord.js');
 
@@ -110,7 +107,7 @@ const FEATURES = {
         emoji: '🛡️',
         description: 'Anti-debug and environment validation',
         default: false,
-        roblox: false, // Disabled for Roblox (can cause issues)
+        roblox: false,
         loadstring: true,
         standard: true
     },
@@ -144,13 +141,11 @@ const TARGETS = {
         id: 'roblox',
         name: 'Roblox Executors',
         emoji: '🎮',
-        description: 'Synapse X, ScriptWare, Krnl, Fluxus, etc',
+        description: 'Synapse X, ScriptWare, Krnl, Fluxus, Delta, etc',
         details: [
             '✅ bit32 support',
             '✅ Executor globals (getgenv, etc)',
-            '✅ Roblox API compatible',
-            '❌ No debug library',
-            '❌ No getfenv/setfenv'
+            '✅ Roblox API compatible'
         ]
     },
     loadstring: {
@@ -161,8 +156,7 @@ const TARGETS = {
         details: [
             '✅ loadstring() compatible',
             '✅ getfenv/setfenv support',
-            '✅ Standard Lua globals',
-            '✅ bit32/bit support'
+            '✅ Standard Lua globals'
         ]
     },
     standard: {
@@ -173,8 +167,7 @@ const TARGETS = {
         details: [
             '✅ Full Lua compatibility',
             '✅ All debug functions',
-            '✅ All standard libraries',
-            '✅ Maximum features'
+            '✅ All standard libraries'
         ]
     }
 };
@@ -254,6 +247,11 @@ const PRESETS = {
 };
 
 // ═══════════════════════════════════════════════════════════
+// ACTIVE SESSIONS (untuk tracking)
+// ═══════════════════════════════════════════════════════════
+const activeSessions = new Map();
+
+// ═══════════════════════════════════════════════════════════
 // COMMAND DEFINITION
 // ═══════════════════════════════════════════════════════════
 module.exports = {
@@ -297,12 +295,20 @@ module.exports = {
                 )
         ),
 
-    cooldown: 30, // 30 seconds cooldown
+    cooldown: 10, // Reduced cooldown
 
     // ═══════════════════════════════════════════════════════════
     // EXECUTE
     // ═══════════════════════════════════════════════════════════
     async execute(interaction) {
+        // ✅ FIX: Clean up old session if exists
+        const existingSession = activeSessions.get(interaction.user.id);
+        if (existingSession && existingSession.collector) {
+            try {
+                existingSession.collector.stop('new_session');
+            } catch (e) { /* ignore */ }
+        }
+
         // Check if obfuscator is available
         if (!Obfuscator) {
             return interaction.reply({
@@ -330,7 +336,6 @@ module.exports = {
 
         try {
             if (file) {
-                // Validate file extension
                 const validExtensions = ['.lua', '.txt', '.luau'];
                 const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
                 
@@ -368,19 +373,21 @@ module.exports = {
         // Create session
         const session = {
             id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-            userId: interaction.user.id,
+            odriverId: interaction.user.id,
             code: luaCode,
             fileName: fileName,
             target: targetOption || 'roblox',
             features: presetOption ? { ...PRESETS[presetOption].features } : getDefaultFeatures(),
-            startTime: Date.now()
+            startTime: Date.now(),
+            collector: null // Will be set later
         };
 
         // Apply target-specific feature restrictions
         applyTargetRestrictions(session);
 
-        // If preset provided and no customization needed, obfuscate directly
+        // If preset provided and target provided, obfuscate directly
         if (presetOption && targetOption) {
+            // ✅ FIX: Defer reply IMMEDIATELY before any async operation
             await interaction.deferReply();
             await performObfuscation(interaction, session, true);
         } else {
@@ -472,8 +479,8 @@ function createMainEmbed(session) {
         .join('\n');
 
     const targetInfo = TARGETS[session.target];
-    const codePreview = session.code.length > 200 
-        ? session.code.substring(0, 200).replace(/`/g, "'") + '...' 
+    const codePreview = session.code.length > 150 
+        ? session.code.substring(0, 150).replace(/`/g, "'") + '...' 
         : session.code.replace(/`/g, "'");
 
     const embed = new EmbedBuilder()
@@ -488,12 +495,12 @@ function createMainEmbed(session) {
             },
             {
                 name: '📊 Input Stats',
-                value: `📝 ${session.code.length} chars | 📃 ${session.code.split('\n').length} lines | 📁 ${session.fileName}`,
+                value: `📝 ${session.code.length} chars | 📃 ${session.code.split('\n').length} lines`,
                 inline: false
             },
             {
                 name: `🎯 Target: ${targetInfo.emoji} ${targetInfo.name}`,
-                value: targetInfo.details.slice(0, 3).join('\n'),
+                value: targetInfo.details.join('\n'),
                 inline: false
             },
             {
@@ -507,7 +514,7 @@ function createMainEmbed(session) {
                 inline: true
             }
         )
-        .setFooter({ text: `Session: ${session.id} • LuaShield v1.0.0` })
+        .setFooter({ text: `Session: ${session.id}` })
         .setTimestamp();
 
     if (unavailableFeatures) {
@@ -522,10 +529,6 @@ function createMainEmbed(session) {
 }
 
 function createSuccessEmbed(stats, targetName) {
-    const compressionInfo = stats.ratio > 100 
-        ? `📈 Size increased by ${stats.ratio - 100}% (normal for obfuscation)`
-        : `📉 Compressed by ${100 - stats.ratio}%`;
-
     return new EmbedBuilder()
         .setColor(0x00FF00)
         .setTitle('✅ Obfuscation Complete!')
@@ -536,25 +539,24 @@ function createSuccessEmbed(stats, targetName) {
                 value: [
                     `📥 **Input Size:** ${formatBytes(stats.inputSize)}`,
                     `📤 **Output Size:** ${formatBytes(stats.outputSize)}`,
-                    compressionInfo,
-                    `⏱️ **Processing Time:** ${stats.processingTime}ms`,
-                    `🎯 **Target:** ${targetName}`,
-                    `✨ **Features Used:** ${stats.featuresEnabled || 'N/A'}`
+                    `📈 **Ratio:** ${stats.ratio}x`,
+                    `⏱️ **Time:** ${stats.processingTime}ms`,
+                    `🎯 **Target:** ${targetName}`
                 ].join('\n'),
                 inline: false
             },
             {
-                name: '📈 Obfuscation Details',
+                name: '📈 Details',
                 value: [
-                    `🔤 Strings Encrypted: ${stats.stringsEncrypted || 0}`,
-                    `🔢 Constants Encrypted: ${stats.constantsEncrypted || 0}`,
-                    `📝 Variables Renamed: ${stats.variablesRenamed || 0}`,
-                    `🗑️ Junk Code Injected: ${stats.junkInjected || 0}`
+                    `🔤 Strings: ${stats.stringsEncrypted || 0}`,
+                    `🔢 Constants: ${stats.constantsEncrypted || 0}`,
+                    `📝 Variables: ${stats.variablesRenamed || 0}`,
+                    `🔀 VM Instructions: ${stats.vmInstructions || 0}`
                 ].join('\n'),
                 inline: false
             }
         )
-        .setFooter({ text: 'Powered by LuaShield • Luraph-style protection' })
+        .setFooter({ text: 'Powered by LuaShield' })
         .setTimestamp();
 }
 
@@ -564,21 +566,9 @@ function createProcessingEmbed(session) {
         .setTitle('⏳ Processing...')
         .setDescription('Your code is being obfuscated. Please wait...')
         .addFields(
-            {
-                name: '🎯 Target',
-                value: TARGETS[session.target].name,
-                inline: true
-            },
-            {
-                name: '✨ Features',
-                value: `${Object.values(session.features).filter(v => v).length} enabled`,
-                inline: true
-            },
-            {
-                name: '📊 Input Size',
-                value: formatBytes(session.code.length),
-                inline: true
-            }
+            { name: '🎯 Target', value: TARGETS[session.target].name, inline: true },
+            { name: '✨ Features', value: `${Object.values(session.features).filter(v => v).length} enabled`, inline: true },
+            { name: '📊 Input', value: formatBytes(session.code.length), inline: true }
         )
         .setTimestamp();
 }
@@ -668,7 +658,7 @@ function createActionButtons() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FEATURE MENU
+// FEATURE MENU - FIXED VERSION
 // ═══════════════════════════════════════════════════════════
 
 async function showFeatureMenu(interaction, session) {
@@ -680,30 +670,41 @@ async function showFeatureMenu(interaction, session) {
         createActionButtons()
     ];
 
-    const response = await interaction.reply({
+    // ✅ FIX: Use new method without fetchReply
+    await interaction.reply({
         embeds: [embed],
-        components: components,
-        fetchReply: true
+        components: components
     });
 
-    // Create collector
+    // ✅ FIX: Fetch reply separately
+    const response = await interaction.fetchReply();
+
+    // Create collector with proper error handling
     const collector = response.createMessageComponentCollector({
-        filter: i => i.user.id === session.userId,
+        filter: i => i.user.id === interaction.user.id,
         time: 300000 // 5 minutes
     });
 
+    // Store collector in session for cleanup
+    session.collector = collector;
+    activeSessions.set(interaction.user.id, session);
+
     collector.on('collect', async (i) => {
         try {
+            // ✅ FIX: Defer update immediately to prevent timeout
+            if (i.customId !== 'btn_obfuscate' && i.customId !== 'btn_cancel') {
+                await i.deferUpdate();
+            }
+
             // Target selection
             if (i.customId === 'select_target') {
                 session.target = i.values[0];
                 applyTargetRestrictions(session);
-                await updateMenu(i, session);
+                await safeUpdateMenu(interaction, session);
             }
 
             // Feature selection
             else if (i.customId === 'select_features') {
-                // Reset all to false, enable selected
                 for (const key of Object.keys(session.features)) {
                     session.features[key] = false;
                 }
@@ -712,7 +713,7 @@ async function showFeatureMenu(interaction, session) {
                         session.features[key] = true;
                     }
                 }
-                await updateMenu(i, session);
+                await safeUpdateMenu(interaction, session);
             }
 
             // Preset buttons
@@ -722,7 +723,7 @@ async function showFeatureMenu(interaction, session) {
                     session.features = { ...PRESETS[presetName].features };
                     applyTargetRestrictions(session);
                 }
-                await updateMenu(i, session);
+                await safeUpdateMenu(interaction, session);
             }
 
             // Select all
@@ -730,7 +731,7 @@ async function showFeatureMenu(interaction, session) {
                 for (const [key, feature] of Object.entries(FEATURES)) {
                     session.features[key] = feature[session.target];
                 }
-                await updateMenu(i, session);
+                await safeUpdateMenu(interaction, session);
             }
 
             // Deselect all
@@ -738,7 +739,7 @@ async function showFeatureMenu(interaction, session) {
                 for (const key of Object.keys(session.features)) {
                     session.features[key] = false;
                 }
-                await updateMenu(i, session);
+                await safeUpdateMenu(interaction, session);
             }
 
             // Cancel
@@ -754,87 +755,129 @@ async function showFeatureMenu(interaction, session) {
                     ],
                     components: []
                 });
+                // ✅ FIX: Cleanup session
+                activeSessions.delete(interaction.user.id);
             }
 
             // Obfuscate
             else if (i.customId === 'btn_obfuscate') {
                 collector.stop('obfuscating');
+                // ✅ FIX: Cleanup session before obfuscation
+                activeSessions.delete(interaction.user.id);
                 await performObfuscation(i, session, false);
             }
 
         } catch (error) {
             logger.error('Interaction error:', error);
             console.error(error);
+            
+            // ✅ FIX: Try to respond to user about error
+            try {
+                await interaction.editReply({
+                    embeds: [createErrorEmbed(`Interaction error: ${error.message}`)],
+                    components: []
+                });
+            } catch (e) { /* ignore */ }
+            
+            // Cleanup
+            activeSessions.delete(interaction.user.id);
         }
     });
 
-    collector.on('end', (collected, reason) => {
+    collector.on('end', async (collected, reason) => {
+        // ✅ FIX: Cleanup session on end
+        activeSessions.delete(interaction.user.id);
+        
         if (reason === 'time') {
-            interaction.editReply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor(0xFF9900)
-                        .setTitle('⏰ Session Expired')
-                        .setDescription('The session has timed out. Please use `/obfuscate` again.')
-                        .setTimestamp()
-                ],
-                components: []
-            }).catch(() => {});
+            try {
+                await interaction.editReply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor(0xFF9900)
+                            .setTitle('⏰ Session Expired')
+                            .setDescription('The session has timed out. Please use `/obfuscate` again.')
+                            .setTimestamp()
+                    ],
+                    components: []
+                });
+            } catch (e) { /* ignore - message may be deleted */ }
         }
     });
 }
 
-async function updateMenu(interaction, session) {
-    const embed = createMainEmbed(session);
-    const components = [
-        createTargetSelectMenu(session.target),
-        createFeatureSelectMenu(session.features, session.target),
-        createPresetButtons(),
-        createActionButtons()
-    ];
+// ✅ NEW: Safe update menu function
+async function safeUpdateMenu(interaction, session) {
+    try {
+        const embed = createMainEmbed(session);
+        const components = [
+            createTargetSelectMenu(session.target),
+            createFeatureSelectMenu(session.features, session.target),
+            createPresetButtons(),
+            createActionButtons()
+        ];
 
-    await interaction.update({
-        embeds: [embed],
-        components: components
-    });
+        await interaction.editReply({
+            embeds: [embed],
+            components: components
+        });
+    } catch (error) {
+        logger.error('Failed to update menu:', error);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════
-// OBFUSCATION
+// OBFUSCATION - FIXED VERSION
 // ═══════════════════════════════════════════════════════════
 
 async function performObfuscation(interaction, session, isDeferred) {
-    // Show processing message
     const processingEmbed = createProcessingEmbed(session);
     
-    if (isDeferred) {
-        await interaction.editReply({
-            embeds: [processingEmbed],
-            components: []
-        });
-    } else {
-        await interaction.update({
-            embeds: [processingEmbed],
-            components: []
-        });
+    try {
+        // ✅ FIX: Handle both deferred and non-deferred cases
+        if (isDeferred) {
+            await interaction.editReply({
+                embeds: [processingEmbed],
+                components: []
+            });
+        } else {
+            await interaction.update({
+                embeds: [processingEmbed],
+                components: []
+            });
+        }
+    } catch (error) {
+        logger.error('Failed to show processing message:', error);
+        // Try alternative method
+        try {
+            await interaction.editReply({
+                embeds: [processingEmbed],
+                components: []
+            });
+        } catch (e) { /* ignore */ }
     }
 
     try {
-        // Count enabled features
         const enabledCount = Object.values(session.features).filter(v => v).length;
+        
+        // ✅ FIX: Reset obfuscator before use
+        if (Obfuscator.Obfuscator) {
+            const obfuscatorInstance = new Obfuscator.Obfuscator();
+            obfuscatorInstance.reset();
+        }
         
         // Perform obfuscation
         const result = await Obfuscator.obfuscate(session.code, {
             target: session.target,
             features: session.features,
-            seed: Date.now()
+            seed: Date.now(),
+            luraphStyle: true,
+            deltaCompatible: true
         });
 
         if (!result.success) {
             throw new Error(result.error || 'Obfuscation failed');
         }
 
-        // Calculate stats
         const stats = {
             ...result.stats,
             featuresEnabled: enabledCount
@@ -847,43 +890,47 @@ async function performObfuscation(interaction, session, isDeferred) {
             { name: outputFileName }
         );
 
-        // Create success embed
         const successEmbed = createSuccessEmbed(stats, TARGETS[session.target].name);
 
-        // Send result
+        // ✅ FIX: Use editReply for both cases
         await interaction.editReply({
             embeds: [successEmbed],
             files: [attachment],
             components: []
         });
 
-        // Log success
-        logger.obfuscate(`Success: ${session.fileName} | ${stats.inputSize}b → ${stats.outputSize}b | ${stats.processingTime}ms | Target: ${session.target}`);
+        logger.obfuscate(`Success: ${session.fileName} | ${stats.inputSize}b → ${stats.outputSize}b | ${stats.processingTime}ms`);
 
     } catch (error) {
         logger.error('Obfuscation failed:', error);
         console.error(error);
 
-        await interaction.editReply({
-            embeds: [
-                new EmbedBuilder()
-                    .setColor(0xFF0000)
-                    .setTitle('❌ Obfuscation Failed')
-                    .setDescription(`An error occurred:\n\`\`\`${error.message}\`\`\``)
-                    .addFields({
-                        name: '💡 Suggestions',
-                        value: [
-                            '• Make sure your Lua code is valid',
-                            '• Try with fewer features enabled',
-                            '• Try a different target platform',
-                            '• Check for unsupported syntax',
-                            '• Reduce code size if very large'
-                        ].join('\n')
-                    })
-                    .setTimestamp()
-            ],
-            components: []
-        });
+        // ✅ FIX: Always use editReply for error
+        try {
+            await interaction.editReply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('❌ Obfuscation Failed')
+                        .setDescription(`An error occurred:\n\`\`\`${error.message}\`\`\``)
+                        .addFields({
+                            name: '💡 Suggestions',
+                            value: [
+                                '• Make sure your Lua code is valid',
+                                '• Try with fewer features enabled',
+                                '• Try the "Light" preset first',
+                                '• Check for unsupported syntax'
+                            ].join('\n')
+                        })
+                        .setTimestamp()
+                ],
+                files: [],
+                components: []
+            });
+        } catch (e) {
+            // Last resort
+            logger.error('Failed to send error message:', e);
+        }
     }
 }
 
@@ -895,4 +942,4 @@ function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-}
+                                }
