@@ -1,15 +1,23 @@
 /**
  * LuaShield Obfuscator - Discord Bot Entry Point
- * Terintegrasi dengan GitHub + Render
+ * FIXED VERSION - Proper error handling
  */
 
 require('dotenv').config();
 
 const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
-const { startServer } = require('./keep-alive');
 const { logger } = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
+
+// ✅ FIX: Safe import for keep-alive
+let startServer;
+try {
+    const keepAlive = require('./keep-alive');
+    startServer = keepAlive.startServer;
+} catch (e) {
+    startServer = () => console.log('Keep-alive not available');
+}
 
 // ═══════════════════════════════════════════════════════════
 // BOT INITIALIZATION
@@ -21,7 +29,6 @@ const client = new Client({
     ]
 });
 
-// Collections untuk commands
 client.commands = new Collection();
 client.cooldowns = new Collection();
 
@@ -34,14 +41,20 @@ if (fs.existsSync(commandsPath)) {
     const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
     
     for (const file of commandFiles) {
-        const filePath = path.join(commandsPath, file);
-        const command = require(filePath);
-        
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-            logger.info(`Loaded command: /${command.data.name}`);
-        } else {
-            logger.warn(`Command ${file} missing required properties`);
+        try {
+            const filePath = path.join(commandsPath, file);
+            // ✅ FIX: Clear cache before requiring
+            delete require.cache[require.resolve(filePath)];
+            const command = require(filePath);
+            
+            if ('data' in command && 'execute' in command) {
+                client.commands.set(command.data.name, command);
+                logger.info(`Loaded command: /${command.data.name}`);
+            } else {
+                logger.warn(`Command ${file} missing required properties`);
+            }
+        } catch (error) {
+            logger.error(`Failed to load command ${file}:`, error.message);
         }
     }
 }
@@ -55,87 +68,89 @@ if (fs.existsSync(eventsPath)) {
     const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
     
     for (const file of eventFiles) {
-        const filePath = path.join(eventsPath, file);
-        const event = require(filePath);
-        
-        if (event.once) {
-            client.once(event.name, (...args) => event.execute(...args, client));
-        } else {
-            client.on(event.name, (...args) => event.execute(...args, client));
+        try {
+            const filePath = path.join(eventsPath, file);
+            delete require.cache[require.resolve(filePath)];
+            const event = require(filePath);
+            
+            if (event.once) {
+                client.once(event.name, (...args) => event.execute(...args, client));
+            } else {
+                client.on(event.name, (...args) => event.execute(...args, client));
+            }
+            
+            logger.info(`Loaded event: ${event.name}`);
+        } catch (error) {
+            logger.error(`Failed to load event ${file}:`, error.message);
         }
-        
-        logger.info(`Loaded event: ${event.name}`);
     }
 }
 
 // ═══════════════════════════════════════════════════════════
-// INTERACTION HANDLER
+// INTERACTION HANDLER - FIXED
 // ═══════════════════════════════════════════════════════════
 client.on(Events.InteractionCreate, async (interaction) => {
-    // Handle slash commands
-    if (interaction.isChatInputCommand()) {
-        const command = client.commands.get(interaction.commandName);
-        
-        if (!command) {
-            logger.warn(`Unknown command: ${interaction.commandName}`);
-            return;
-        }
+    // ✅ FIX: Only handle chat input commands here
+    // Button and select menu are handled by collectors in commands
+    if (!interaction.isChatInputCommand()) return;
 
-        // Cooldown check
-        const { cooldowns } = client;
-        
-        if (!cooldowns.has(command.data.name)) {
-            cooldowns.set(command.data.name, new Collection());
-        }
+    const command = client.commands.get(interaction.commandName);
+    
+    if (!command) {
+        logger.warn(`Unknown command: ${interaction.commandName}`);
+        return;
+    }
 
-        const now = Date.now();
-        const timestamps = cooldowns.get(command.data.name);
-        const cooldownAmount = (command.cooldown || 3) * 1000;
+    // Cooldown check
+    const { cooldowns } = client;
+    
+    if (!cooldowns.has(command.data.name)) {
+        cooldowns.set(command.data.name, new Collection());
+    }
 
-        if (timestamps.has(interaction.user.id)) {
-            const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
+    const now = Date.now();
+    const timestamps = cooldowns.get(command.data.name);
+    const cooldownAmount = (command.cooldown || 3) * 1000;
 
-            if (now < expirationTime) {
-                const timeLeft = (expirationTime - now) / 1000;
-                return interaction.reply({
-                    content: `⏳ Please wait ${timeLeft.toFixed(1)}s before using \`/${command.data.name}\` again.`,
-                    ephemeral: true
-                });
-            }
-        }
+    if (timestamps.has(interaction.user.id)) {
+        const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
 
-        timestamps.set(interaction.user.id, now);
-        setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
-
-        // Execute command
-        try {
-            logger.bot(`Command: /${command.data.name} by ${interaction.user.tag}`);
-            await command.execute(interaction, client);
-        } catch (error) {
-            logger.error(`Command error: ${error.message}`);
-            console.error(error);
-            
-            const errorMessage = {
-                content: '❌ An error occurred while executing this command.',
+        if (now < expirationTime) {
+            const timeLeft = (expirationTime - now) / 1000;
+            return interaction.reply({
+                content: `⏳ Please wait ${timeLeft.toFixed(1)}s before using \`/${command.data.name}\` again.`,
                 ephemeral: true
-            };
+            }).catch(() => {});
+        }
+    }
 
+    timestamps.set(interaction.user.id, now);
+    setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+
+    // Execute command with proper error handling
+    try {
+        logger.bot(`Command: /${command.data.name} by ${interaction.user.tag}`);
+        await command.execute(interaction, client);
+    } catch (error) {
+        logger.error(`Command error: ${error.message}`);
+        console.error(error);
+        
+        // ✅ FIX: Proper error response
+        const errorMessage = {
+            content: '❌ An error occurred while executing this command.',
+            ephemeral: true
+        };
+
+        try {
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp(errorMessage);
             } else {
                 await interaction.reply(errorMessage);
             }
+        } catch (e) {
+            // Interaction may have expired, ignore
+            logger.error('Failed to send error message:', e.message);
         }
-    }
-    
-    // Handle button interactions
-    else if (interaction.isButton()) {
-        // Will be handled by individual command collectors
-    }
-    
-    // Handle select menu interactions
-    else if (interaction.isStringSelectMenu()) {
-        // Will be handled by individual command collectors
     }
 });
 
@@ -152,7 +167,8 @@ process.on('unhandledRejection', (error) => {
 
 process.on('uncaughtException', (error) => {
     logger.error('Uncaught exception:', error);
-    process.exit(1);
+    // ✅ FIX: Don't exit on uncaught exception, just log
+    // process.exit(1);
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -161,18 +177,16 @@ process.on('uncaughtException', (error) => {
 async function start() {
     console.log('');
     console.log('╔══════════════════════════════════════════════════════╗');
-    console.log('║                                                      ║');
     console.log('║     🛡️  LuaShield Obfuscator Bot                     ║');
     console.log('║         Professional Lua Protection                  ║');
-    console.log('║                                                      ║');
     console.log('╠══════════════════════════════════════════════════════╣');
     console.log('║  Version: ' + (process.env.BOT_VERSION || '1.0.0').padEnd(41) + '║');
     console.log('║  Node.js: ' + process.version.padEnd(41) + '║');
     console.log('╚══════════════════════════════════════════════════════╝');
     console.log('');
 
-    // Start keep-alive server for Render
-    startServer();
+    // Start keep-alive server
+    if (startServer) startServer();
 
     // Login to Discord
     try {
@@ -183,14 +197,18 @@ async function start() {
         process.exit(1);
     }
 
-    // Clean temp files periodically
+    // ✅ FIX: Safe cleanup interval
     setInterval(() => {
-        const fileHandler = require('../utils/fileHandler');
-        const cleaned = fileHandler.cleanTempFiles();
-        if (cleaned > 0) {
-            logger.info(`Cleaned ${cleaned} temp files`);
-        }
-    }, 3600000); // Every hour
+        try {
+            const fileHandler = require('../utils/fileHandler');
+            if (fileHandler && fileHandler.cleanTempFiles) {
+                const cleaned = fileHandler.cleanTempFiles();
+                if (cleaned > 0) {
+                    logger.info(`Cleaned ${cleaned} temp files`);
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }, 3600000);
 }
 
 start();
