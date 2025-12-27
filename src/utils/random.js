@@ -208,6 +208,18 @@ class Random {
         return result;
     }
 
+    /**
+     * Generate random hex string
+     */
+    hex(length = 8) {
+        const chars = '0123456789abcdef';
+        let result = '';
+        for (let i = 0; i < length; i++) {
+            result += this.choice(chars.split(''));
+        }
+        return result;
+    }
+
     key(length = null) {
         length = length || this.int(8, 32);
         const chars = this.charsAll + '0123456789';
