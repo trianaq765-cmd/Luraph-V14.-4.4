@@ -1,13 +1,16 @@
 /**
- * LuaShield - AST Node Types
- * Define semua node types untuk Lua AST
+ * LuaShield - AST Node Types & Builders
+ * Definisi semua node types untuk Lua AST
  */
 
-const NodeTypes = {
+// ═══════════════════════════════════════════════════════════
+// NODE TYPES
+// ═══════════════════════════════════════════════════════════
+const Types = {
     // Program
     CHUNK: 'Chunk',
     BLOCK: 'Block',
-
+    
     // Statements
     LOCAL_STATEMENT: 'LocalStatement',
     ASSIGNMENT_STATEMENT: 'AssignmentStatement',
@@ -26,455 +29,425 @@ const NodeTypes = {
     BREAK_STATEMENT: 'BreakStatement',
     GOTO_STATEMENT: 'GotoStatement',
     LABEL_STATEMENT: 'LabelStatement',
-
+    
     // Expressions
     IDENTIFIER: 'Identifier',
-    LITERAL: 'Literal',
-    STRING_LITERAL: 'StringLiteral',
-    NUMERIC_LITERAL: 'NumericLiteral',
-    BOOLEAN_LITERAL: 'BooleanLiteral',
-    NIL_LITERAL: 'NilLiteral',
-    VARARG_LITERAL: 'VarargLiteral',
-    TABLE_CONSTRUCTOR: 'TableConstructorExpression',
-    TABLE_KEY: 'TableKey',
-    TABLE_KEY_STRING: 'TableKeyString',
-    TABLE_VALUE: 'TableValue',
-    BINARY_EXPRESSION: 'BinaryExpression',
-    UNARY_EXPRESSION: 'UnaryExpression',
-    LOGICAL_EXPRESSION: 'LogicalExpression',
     MEMBER_EXPRESSION: 'MemberExpression',
     INDEX_EXPRESSION: 'IndexExpression',
     CALL_EXPRESSION: 'CallExpression',
     STRING_CALL_EXPRESSION: 'StringCallExpression',
     TABLE_CALL_EXPRESSION: 'TableCallExpression',
-    FUNCTION_EXPRESSION: 'FunctionDeclaration',
-
+    FUNCTION_EXPRESSION: 'FunctionExpression',
+    BINARY_EXPRESSION: 'BinaryExpression',
+    UNARY_EXPRESSION: 'UnaryExpression',
+    LOGICAL_EXPRESSION: 'LogicalExpression',
+    
+    // Literals
+    STRING_LITERAL: 'StringLiteral',
+    NUMERIC_LITERAL: 'NumericLiteral',
+    BOOLEAN_LITERAL: 'BooleanLiteral',
+    NIL_LITERAL: 'NilLiteral',
+    VARARG_LITERAL: 'VarargLiteral',
+    
+    // Table
+    TABLE_CONSTRUCTOR: 'TableConstructorExpression',
+    TABLE_KEY: 'TableKey',
+    TABLE_KEY_STRING: 'TableKeyString',
+    TABLE_VALUE: 'TableValue',
+    
     // Comments
     COMMENT: 'Comment'
 };
 
-/**
- * Node Factory - Create AST nodes
- */
-class NodeFactory {
-    static createNode(type, properties = {}) {
+// ═══════════════════════════════════════════════════════════
+// NODE BUILDERS
+// ═══════════════════════════════════════════════════════════
+const Builders = {
+    // Program
+    chunk(body, comments = []) {
         return {
-            type,
-            ...properties
+            type: Types.CHUNK,
+            body: body || [],
+            comments: comments
         };
-    }
+    },
 
-    // ═══════════════════════════════════════════════════════
-    // LITERALS
-    // ═══════════════════════════════════════════════════════
-    static identifier(name) {
+    block(body) {
         return {
-            type: NodeTypes.IDENTIFIER,
-            name
+            type: Types.BLOCK,
+            body: body || []
         };
-    }
+    },
 
-    static stringLiteral(value, raw = null) {
+    // Statements
+    localStatement(variables, init = []) {
         return {
-            type: NodeTypes.STRING_LITERAL,
-            value,
+            type: Types.LOCAL_STATEMENT,
+            variables: variables,
+            init: init
+        };
+    },
+
+    assignmentStatement(variables, init) {
+        return {
+            type: Types.ASSIGNMENT_STATEMENT,
+            variables: variables,
+            init: init
+        };
+    },
+
+    callStatement(expression) {
+        return {
+            type: Types.CALL_STATEMENT,
+            expression: expression
+        };
+    },
+
+    functionDeclaration(identifier, parameters, isLocal, body) {
+        return {
+            type: Types.FUNCTION_DECLARATION,
+            identifier: identifier,
+            parameters: parameters || [],
+            isLocal: isLocal || false,
+            body: body || []
+        };
+    },
+
+    ifStatement(clauses) {
+        return {
+            type: Types.IF_STATEMENT,
+            clauses: clauses || []
+        };
+    },
+
+    ifClause(condition, body) {
+        return {
+            type: Types.IF_CLAUSE,
+            condition: condition,
+            body: body || []
+        };
+    },
+
+    elseifClause(condition, body) {
+        return {
+            type: Types.ELSEIF_CLAUSE,
+            condition: condition,
+            body: body || []
+        };
+    },
+
+    elseClause(body) {
+        return {
+            type: Types.ELSE_CLAUSE,
+            body: body || []
+        };
+    },
+
+    whileStatement(condition, body) {
+        return {
+            type: Types.WHILE_STATEMENT,
+            condition: condition,
+            body: body || []
+        };
+    },
+
+    doStatement(body) {
+        return {
+            type: Types.DO_STATEMENT,
+            body: body || []
+        };
+    },
+
+    repeatStatement(condition, body) {
+        return {
+            type: Types.REPEAT_STATEMENT,
+            condition: condition,
+            body: body || []
+        };
+    },
+
+    forNumericStatement(variable, start, end, step, body) {
+        return {
+            type: Types.FOR_NUMERIC_STATEMENT,
+            variable: variable,
+            start: start,
+            end: end,
+            step: step,
+            body: body || []
+        };
+    },
+
+    forGenericStatement(variables, iterators, body) {
+        return {
+            type: Types.FOR_GENERIC_STATEMENT,
+            variables: variables,
+            iterators: iterators,
+            body: body || []
+        };
+    },
+
+    returnStatement(arguments_) {
+        return {
+            type: Types.RETURN_STATEMENT,
+            arguments: arguments_ || []
+        };
+    },
+
+    breakStatement() {
+        return { type: Types.BREAK_STATEMENT };
+    },
+
+    gotoStatement(label) {
+        return {
+            type: Types.GOTO_STATEMENT,
+            label: label
+        };
+    },
+
+    labelStatement(label) {
+        return {
+            type: Types.LABEL_STATEMENT,
+            label: label
+        };
+    },
+
+    // Expressions
+    identifier(name) {
+        return {
+            type: Types.IDENTIFIER,
+            name: name
+        };
+    },
+
+    memberExpression(base, indexer, identifier) {
+        return {
+            type: Types.MEMBER_EXPRESSION,
+            base: base,
+            indexer: indexer, // '.' or ':'
+            identifier: identifier
+        };
+    },
+
+    indexExpression(base, index) {
+        return {
+            type: Types.INDEX_EXPRESSION,
+            base: base,
+            index: index
+        };
+    },
+
+    callExpression(base, arguments_) {
+        return {
+            type: Types.CALL_EXPRESSION,
+            base: base,
+            arguments: arguments_ || []
+        };
+    },
+
+    stringCallExpression(base, argument) {
+        return {
+            type: Types.STRING_CALL_EXPRESSION,
+            base: base,
+            argument: argument
+        };
+    },
+
+    tableCallExpression(base, argument) {
+        return {
+            type: Types.TABLE_CALL_EXPRESSION,
+            base: base,
+            argument: argument
+        };
+    },
+
+    functionExpression(parameters, body) {
+        return {
+            type: Types.FUNCTION_EXPRESSION,
+            parameters: parameters || [],
+            body: body || []
+        };
+    },
+
+    binaryExpression(operator, left, right) {
+        return {
+            type: Types.BINARY_EXPRESSION,
+            operator: operator,
+            left: left,
+            right: right
+        };
+    },
+
+    unaryExpression(operator, argument) {
+        return {
+            type: Types.UNARY_EXPRESSION,
+            operator: operator,
+            argument: argument
+        };
+    },
+
+    logicalExpression(operator, left, right) {
+        return {
+            type: Types.LOGICAL_EXPRESSION,
+            operator: operator,
+            left: left,
+            right: right
+        };
+    },
+
+    // Literals
+    stringLiteral(value, raw) {
+        return {
+            type: Types.STRING_LITERAL,
+            value: value,
             raw: raw || `"${value}"`
         };
-    }
+    },
 
-    static numericLiteral(value, raw = null) {
+    numericLiteral(value, raw) {
         return {
-            type: NodeTypes.NUMERIC_LITERAL,
-            value,
+            type: Types.NUMERIC_LITERAL,
+            value: value,
             raw: raw || String(value)
         };
-    }
+    },
 
-    static booleanLiteral(value) {
+    booleanLiteral(value) {
         return {
-            type: NodeTypes.BOOLEAN_LITERAL,
-            value,
-            raw: value ? 'true' : 'false'
+            type: Types.BOOLEAN_LITERAL,
+            value: value,
+            raw: String(value)
         };
-    }
+    },
 
-    static nilLiteral() {
+    nilLiteral() {
         return {
-            type: NodeTypes.NIL_LITERAL,
+            type: Types.NIL_LITERAL,
             value: null,
             raw: 'nil'
         };
-    }
+    },
 
-    static varargLiteral() {
+    varargLiteral() {
         return {
-            type: NodeTypes.VARARG_LITERAL,
+            type: Types.VARARG_LITERAL,
             value: '...',
             raw: '...'
         };
-    }
+    },
 
-    // ═══════════════════════════════════════════════════════
-    // EXPRESSIONS
-    // ═══════════════════════════════════════════════════════
-    static binaryExpression(operator, left, right) {
+    // Table
+    tableConstructor(fields) {
         return {
-            type: NodeTypes.BINARY_EXPRESSION,
-            operator,
-            left,
-            right
+            type: Types.TABLE_CONSTRUCTOR,
+            fields: fields || []
+        };
+    },
+
+    tableKey(key, value) {
+        return {
+            type: Types.TABLE_KEY,
+            key: key,
+            value: value
+        };
+    },
+
+    tableKeyString(key, value) {
+        return {
+            type: Types.TABLE_KEY_STRING,
+            key: key,
+            value: value
+        };
+    },
+
+    tableValue(value) {
+        return {
+            type: Types.TABLE_VALUE,
+            value: value
+        };
+    },
+
+    // Comment
+    comment(value, raw) {
+        return {
+            type: Types.COMMENT,
+            value: value,
+            raw: raw
         };
     }
+};
 
-    static unaryExpression(operator, argument) {
-        return {
-            type: NodeTypes.UNARY_EXPRESSION,
-            operator,
-            argument
-        };
-    }
+// ═══════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════
+const Utils = {
+    /**
+     * Check if node is expression
+     */
+    isExpression(node) {
+        const exprTypes = [
+            Types.IDENTIFIER, Types.MEMBER_EXPRESSION, Types.INDEX_EXPRESSION,
+            Types.CALL_EXPRESSION, Types.STRING_CALL_EXPRESSION, Types.TABLE_CALL_EXPRESSION,
+            Types.FUNCTION_EXPRESSION, Types.BINARY_EXPRESSION, Types.UNARY_EXPRESSION,
+            Types.LOGICAL_EXPRESSION, Types.STRING_LITERAL, Types.NUMERIC_LITERAL,
+            Types.BOOLEAN_LITERAL, Types.NIL_LITERAL, Types.VARARG_LITERAL,
+            Types.TABLE_CONSTRUCTOR
+        ];
+        return node && exprTypes.includes(node.type);
+    },
 
-    static logicalExpression(operator, left, right) {
-        return {
-            type: NodeTypes.LOGICAL_EXPRESSION,
-            operator,
-            left,
-            right
-        };
-    }
+    /**
+     * Check if node is statement
+     */
+    isStatement(node) {
+        const stmtTypes = [
+            Types.LOCAL_STATEMENT, Types.ASSIGNMENT_STATEMENT, Types.CALL_STATEMENT,
+            Types.FUNCTION_DECLARATION, Types.IF_STATEMENT, Types.WHILE_STATEMENT,
+            Types.DO_STATEMENT, Types.REPEAT_STATEMENT, Types.FOR_NUMERIC_STATEMENT,
+            Types.FOR_GENERIC_STATEMENT, Types.RETURN_STATEMENT, Types.BREAK_STATEMENT,
+            Types.GOTO_STATEMENT, Types.LABEL_STATEMENT
+        ];
+        return node && stmtTypes.includes(node.type);
+    },
 
-    static memberExpression(base, identifier, indexer = '.') {
-        return {
-            type: NodeTypes.MEMBER_EXPRESSION,
-            base,
-            identifier,
-            indexer
-        };
-    }
+    /**
+     * Check if node is literal
+     */
+    isLiteral(node) {
+        const literalTypes = [
+            Types.STRING_LITERAL, Types.NUMERIC_LITERAL,
+            Types.BOOLEAN_LITERAL, Types.NIL_LITERAL, Types.VARARG_LITERAL
+        ];
+        return node && literalTypes.includes(node.type);
+    },
 
-    static indexExpression(base, index) {
-        return {
-            type: NodeTypes.INDEX_EXPRESSION,
-            base,
-            index
-        };
-    }
+    /**
+     * Clone node (deep)
+     */
+    clone(node) {
+        if (!node) return null;
+        return JSON.parse(JSON.stringify(node));
+    },
 
-    static callExpression(base, args) {
-        return {
-            type: NodeTypes.CALL_EXPRESSION,
-            base,
-            arguments: args
-        };
-    }
-
-    static tableConstructor(fields) {
-        return {
-            type: NodeTypes.TABLE_CONSTRUCTOR,
-            fields
-        };
-    }
-
-    static tableKey(key, value) {
-        return {
-            type: NodeTypes.TABLE_KEY,
-            key,
-            value
-        };
-    }
-
-    static tableKeyString(key, value) {
-        return {
-            type: NodeTypes.TABLE_KEY_STRING,
-            key,
-            value
-        };
-    }
-
-    static tableValue(value) {
-        return {
-            type: NodeTypes.TABLE_VALUE,
-            value
-        };
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // STATEMENTS
-    // ═══════════════════════════════════════════════════════
-    static localStatement(variables, init = []) {
-        return {
-            type: NodeTypes.LOCAL_STATEMENT,
-            variables,
-            init
-        };
-    }
-
-    static assignmentStatement(variables, init) {
-        return {
-            type: NodeTypes.ASSIGNMENT_STATEMENT,
-            variables,
-            init
-        };
-    }
-
-    static callStatement(expression) {
-        return {
-            type: NodeTypes.CALL_STATEMENT,
-            expression
-        };
-    }
-
-    static functionDeclaration(identifier, parameters, body, isLocal = false) {
-        return {
-            type: NodeTypes.FUNCTION_DECLARATION,
-            identifier,
-            parameters,
-            body,
-            isLocal
-        };
-    }
-
-    static ifStatement(clauses) {
-        return {
-            type: NodeTypes.IF_STATEMENT,
-            clauses
-        };
-    }
-
-    static ifClause(condition, body) {
-        return {
-            type: NodeTypes.IF_CLAUSE,
-            condition,
-            body
-        };
-    }
-
-    static elseifClause(condition, body) {
-        return {
-            type: NodeTypes.ELSEIF_CLAUSE,
-            condition,
-            body
-        };
-    }
-
-    static elseClause(body) {
-        return {
-            type: NodeTypes.ELSE_CLAUSE,
-            body
-        };
-    }
-
-    static whileStatement(condition, body) {
-        return {
-            type: NodeTypes.WHILE_STATEMENT,
-            condition,
-            body
-        };
-    }
-
-    static doStatement(body) {
-        return {
-            type: NodeTypes.DO_STATEMENT,
-            body
-        };
-    }
-
-    static repeatStatement(condition, body) {
-        return {
-            type: NodeTypes.REPEAT_STATEMENT,
-            condition,
-            body
-        };
-    }
-
-    static forNumericStatement(variable, start, end, step, body) {
-        return {
-            type: NodeTypes.FOR_NUMERIC_STATEMENT,
-            variable,
-            start,
-            end,
-            step,
-            body
-        };
-    }
-
-    static forGenericStatement(variables, iterators, body) {
-        return {
-            type: NodeTypes.FOR_GENERIC_STATEMENT,
-            variables,
-            iterators,
-            body
-        };
-    }
-
-    static returnStatement(args) {
-        return {
-            type: NodeTypes.RETURN_STATEMENT,
-            arguments: args
-        };
-    }
-
-    static breakStatement() {
-        return {
-            type: NodeTypes.BREAK_STATEMENT
-        };
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // PROGRAM
-    // ═══════════════════════════════════════════════════════
-    static chunk(body, comments = []) {
-        return {
-            type: NodeTypes.CHUNK,
-            body,
-            comments
-        };
-    }
-
-    static block(statements) {
-        return {
-            type: NodeTypes.BLOCK,
-            statements
-        };
-    }
-}
-
-/**
- * AST Walker - Traverse AST nodes
- */
-class ASTWalker {
-    constructor() {
-        this.visitors = {};
-    }
-
-    addVisitor(nodeType, visitor) {
-        if (!this.visitors[nodeType]) {
-            this.visitors[nodeType] = [];
+    /**
+     * Add location info ke node
+     */
+    withLocation(node, line, column, range) {
+        if (node) {
+            node.line = line;
+            node.column = column;
+            if (range) {
+                node.range = range;
+            }
         }
-        this.visitors[nodeType].push(visitor);
+        return node;
     }
-
-    walk(node, parent = null) {
-        if (!node) return;
-
-        // Call visitors untuk node type ini
-        const visitors = this.visitors[node.type] || [];
-        for (const visitor of visitors) {
-            visitor(node, parent);
-        }
-
-        // Walk children
-        this._walkChildren(node);
-    }
-
-    _walkChildren(node) {
-        switch (node.type) {
-            case NodeTypes.CHUNK:
-                node.body.forEach(child => this.walk(child, node));
-                break;
-
-            case NodeTypes.LOCAL_STATEMENT:
-            case NodeTypes.ASSIGNMENT_STATEMENT:
-                node.variables.forEach(v => this.walk(v, node));
-                node.init.forEach(i => this.walk(i, node));
-                break;
-
-            case NodeTypes.FUNCTION_DECLARATION:
-                if (node.identifier) this.walk(node.identifier, node);
-                node.parameters.forEach(p => this.walk(p, node));
-                node.body.forEach(s => this.walk(s, node));
-                break;
-
-            case NodeTypes.IF_STATEMENT:
-                node.clauses.forEach(c => this.walk(c, node));
-                break;
-
-            case NodeTypes.IF_CLAUSE:
-            case NodeTypes.ELSEIF_CLAUSE:
-                this.walk(node.condition, node);
-                node.body.forEach(s => this.walk(s, node));
-                break;
-
-            case NodeTypes.ELSE_CLAUSE:
-                node.body.forEach(s => this.walk(s, node));
-                break;
-
-            case NodeTypes.WHILE_STATEMENT:
-            case NodeTypes.REPEAT_STATEMENT:
-                this.walk(node.condition, node);
-                node.body.forEach(s => this.walk(s, node));
-                break;
-
-            case NodeTypes.DO_STATEMENT:
-                node.body.forEach(s => this.walk(s, node));
-                break;
-
-            case NodeTypes.FOR_NUMERIC_STATEMENT:
-                this.walk(node.variable, node);
-                this.walk(node.start, node);
-                this.walk(node.end, node);
-                if (node.step) this.walk(node.step, node);
-                node.body.forEach(s => this.walk(s, node));
-                break;
-
-            case NodeTypes.FOR_GENERIC_STATEMENT:
-                node.variables.forEach(v => this.walk(v, node));
-                node.iterators.forEach(i => this.walk(i, node));
-                node.body.forEach(s => this.walk(s, node));
-                break;
-
-            case NodeTypes.RETURN_STATEMENT:
-                node.arguments.forEach(a => this.walk(a, node));
-                break;
-
-            case NodeTypes.CALL_STATEMENT:
-                this.walk(node.expression, node);
-                break;
-
-            case NodeTypes.CALL_EXPRESSION:
-                this.walk(node.base, node);
-                node.arguments.forEach(a => this.walk(a, node));
-                break;
-
-            case NodeTypes.BINARY_EXPRESSION:
-            case NodeTypes.LOGICAL_EXPRESSION:
-                this.walk(node.left, node);
-                this.walk(node.right, node);
-                break;
-
-            case NodeTypes.UNARY_EXPRESSION:
-                this.walk(node.argument, node);
-                break;
-
-            case NodeTypes.MEMBER_EXPRESSION:
-                this.walk(node.base, node);
-                this.walk(node.identifier, node);
-                break;
-
-            case NodeTypes.INDEX_EXPRESSION:
-                this.walk(node.base, node);
-                this.walk(node.index, node);
-                break;
-
-            case NodeTypes.TABLE_CONSTRUCTOR:
-                node.fields.forEach(f => this.walk(f, node));
-                break;
-
-            case NodeTypes.TABLE_KEY:
-            case NodeTypes.TABLE_KEY_STRING:
-                this.walk(node.key, node);
-                this.walk(node.value, node);
-                break;
-
-            case NodeTypes.TABLE_VALUE:
-                this.walk(node.value, node);
-                break;
-        }
-    }
-}
+};
 
 module.exports = {
-    NodeTypes,
-    NodeFactory,
-    ASTWalker
+    Types,
+    Builders,
+    Utils,
+    // Shorthand exports
+    ...Types,
+    ...Builders
 };
