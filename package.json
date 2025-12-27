@@ -1,17 +1,32 @@
 {
   "name": "luashield-bot",
   "version": "1.0.0",
+  "description": "Professional Lua Obfuscator Discord Bot - Luraph Style",
   "main": "src/bot/index.js",
   "scripts": {
-    "start": "node src/bot/index.js",
+    "start": "node src/bot/deploy-commands.js && node src/bot/index.js",
     "deploy": "node src/bot/deploy-commands.js",
-    "dev": "nodemon src/bot/index.js"
+    "bot": "node src/bot/index.js",
+    "dev": "nodemon src/bot/index.js",
+    "test": "node tests/test.js"
   },
+  "keywords": [
+    "lua",
+    "obfuscator",
+    "discord-bot",
+    "roblox",
+    "luraph"
+  ],
+  "author": "LuaShield",
+  "license": "MIT",
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
   },
   "engines": {
     "node": ">=18.0.0"
