@@ -1,64 +1,57 @@
 /**
  * LuaShield - Main Obfuscator Entry Point
- * FINAL COMPLETE VERSION - Full Integration with VM Obfuscator & Template
+ * FINAL VERSION - Luraph Style, Delta Executor Compatible
  */
 
 const Config = require('./config');
 const Random = require('../utils/random');
-const Helpers = require('../utils/helpers');
 const { logger } = require('../utils/logger');
 
-// Parser (dengan safe import)
+// Safe imports
+let Helpers;
+try { Helpers = require('../utils/helpers'); } catch(e) { Helpers = null; }
+
 let LuaParser;
-try {
-    LuaParser = require('./parser/init');
-} catch (e) {
-    LuaParser = null;
-}
+try { LuaParser = require('./parser/init'); } catch(e) { LuaParser = null; }
 
 // Encryption
-const StringEncryptor = require('./encryption/strings');
-const ConstantEncryptor = require('./encryption/constants');
-const KeyGenerator = require('./encryption/keys');
+let StringEncryptor, ConstantEncryptor, KeyGenerator;
+try { StringEncryptor = require('./encryption/strings'); } catch(e) { StringEncryptor = null; }
+try { ConstantEncryptor = require('./encryption/constants'); } catch(e) { ConstantEncryptor = null; }
+try { KeyGenerator = require('./encryption/keys'); } catch(e) { KeyGenerator = null; }
 
 // Transforms
-const Renamer = require('./transforms/renamer');
-const JunkGenerator = require('./transforms/junk');
-const ControlFlowObfuscator = require('./transforms/controlflow');
-const VMObfuscator = require('./transforms/vm_obfuscator');
+let Renamer, JunkGenerator, ControlFlowObfuscator;
+try { Renamer = require('./transforms/renamer'); } catch(e) { Renamer = null; }
+try { JunkGenerator = require('./transforms/junk'); } catch(e) { JunkGenerator = null; }
+try { ControlFlowObfuscator = require('./transforms/controlflow'); } catch(e) { ControlFlowObfuscator = null; }
 
-// VM
+// VM (Core)
+const VMObfuscator = require('./transforms/vm_obfuscator');
 const BytecodeGenerator = require('./vm/bytecode');
 const VMTemplate = require('./vm/template');
 
-// Safe imports untuk VM modules yang mungkin belum ada
+// VM Optional
 let VMCompiler, VMShuffler, OpcodeManager;
-try {
-    VMCompiler = require('./vm/compiler');
-} catch (e) {
-    VMCompiler = null;
-}
-try {
-    VMShuffler = require('./vm/shuffler');
-} catch (e) {
-    VMShuffler = null;
-}
-try {
-    const opcodes = require('./vm/opcodes');
-    OpcodeManager = opcodes.OpcodeManager;
-} catch (e) {
-    OpcodeManager = null;
-}
+try { VMCompiler = require('./vm/compiler'); } catch(e) { VMCompiler = null; }
+try { VMShuffler = require('./vm/shuffler'); } catch(e) { VMShuffler = null; }
+try { 
+    const opcodes = require('./vm/opcodes'); 
+    OpcodeManager = opcodes.OpcodeManager; 
+} catch(e) { OpcodeManager = null; }
 
 // Security
-const IntegrityChecker = require('./security/integrity');
-const EnvironmentChecker = require('./security/environment');
-const WatermarkGenerator = require('./security/watermark');
+let IntegrityChecker, EnvironmentChecker, WatermarkGenerator;
+try { IntegrityChecker = require('./security/integrity'); } catch(e) { IntegrityChecker = null; }
+try { EnvironmentChecker = require('./security/environment'); } catch(e) { EnvironmentChecker = null; }
+try { WatermarkGenerator = require('./security/watermark'); } catch(e) { WatermarkGenerator = null; }
 
 // Output
-const OutputGenerator = require('./output/generator');
+let OutputGenerator, Serializer;
+try { OutputGenerator = require('./output/generator'); } catch(e) { OutputGenerator = null; }
+try { Serializer = require('./output/serializer'); } catch(e) { Serializer = null; }
+
 const Minifier = require('./output/minifier');
-const Serializer = require('./output/serializer');
 
 class Obfuscator {
     constructor() {
@@ -81,28 +74,32 @@ class Obfuscator {
             seed: seed,
             vmComplexity: options.vmComplexity || 'medium',
             multiLayerVM: options.multiLayerVM || false,
-            vmLayers: options.vmLayers || 2
+            vmLayers: options.vmLayers || 2,
+            luraphStyle: options.luraphStyle !== false,
+            deltaCompatible: options.deltaCompatible !== false
         };
 
-        // Initialize all modules dengan error handling
+        // Initialize modules
         try {
             this.modules = {
                 random: new Random(seed),
                 
-                // Parser (optional)
+                // Parser
                 parser: LuaParser ? new LuaParser() : null,
                 
                 // Encryption
-                stringEncryptor: new StringEncryptor({ seed }),
-                constantEncryptor: new ConstantEncryptor({ seed }),
-                keyGenerator: new KeyGenerator(seed),
+                stringEncryptor: StringEncryptor ? new StringEncryptor({ seed }) : null,
+                constantEncryptor: ConstantEncryptor ? new ConstantEncryptor({ seed }) : null,
+                keyGenerator: KeyGenerator ? new KeyGenerator(seed) : null,
                 
                 // Transforms
-                renamer: new Renamer({ seed }),
-                junkGenerator: new JunkGenerator({ seed, density: 0.2 }),
-                controlFlow: new ControlFlowObfuscator({ seed }),
+                renamer: Renamer ? new Renamer({ seed }) : null,
+                junkGenerator: JunkGenerator ? new JunkGenerator({ seed, density: 0.15 }) : null,
+                controlFlow: ControlFlowObfuscator ? new ControlFlowObfuscator({ seed }) : null,
+                
+                // VM Core
                 vmObfuscator: new VMObfuscator({ 
-                    seed, 
+                    seed,
                     target: this.config.target,
                     enabled: this.config.features.vmObfuscation,
                     complexity: this.config.vmComplexity,
@@ -110,36 +107,36 @@ class Obfuscator {
                     layers: this.config.vmLayers,
                     antiTamper: this.config.features.integrityCheck,
                     antiDebug: this.config.features.environmentCheck,
-                    encryptStrings: this.config.features.stringEncryption
+                    encryptStrings: this.config.features.stringEncryption,
+                    luraphStyle: this.config.luraphStyle
                 }),
-                
-                // VM Core
                 bytecodeGenerator: new BytecodeGenerator({ 
                     seed,
-                    compressionLevel: this._getCompressionLevel()
+                    compressionLevel: this._getCompressionLevel(),
+                    targetRatio: 8
                 }),
                 vmTemplate: new VMTemplate({ 
                     seed, 
                     target: this.config.target 
                 }),
                 
-                // VM Optional modules
+                // VM Optional
                 vmCompiler: VMCompiler ? new VMCompiler({ seed }) : null,
                 vmShuffler: VMShuffler ? new VMShuffler({ seed }) : null,
                 opcodeManager: OpcodeManager ? new OpcodeManager(seed) : null,
                 
                 // Security
-                integrityChecker: new IntegrityChecker({ seed }),
-                environmentChecker: new EnvironmentChecker({ seed, target: this.config.target }),
-                watermarkGenerator: new WatermarkGenerator({ seed }),
+                integrityChecker: IntegrityChecker ? new IntegrityChecker({ seed }) : null,
+                environmentChecker: EnvironmentChecker ? new EnvironmentChecker({ seed, target: this.config.target }) : null,
+                watermarkGenerator: WatermarkGenerator ? new WatermarkGenerator({ seed }) : null,
                 
                 // Output
-                outputGenerator: new OutputGenerator({ seed, target: this.config.target }),
+                outputGenerator: OutputGenerator ? new OutputGenerator({ seed, target: this.config.target }) : null,
                 minifier: new Minifier({ preserveWatermark: true }),
-                serializer: new Serializer({ seed, luraphStyle: true })
+                serializer: Serializer ? new Serializer({ seed, luraphStyle: true }) : null
             };
         } catch (error) {
-            logger.error('Failed to initialize modules:', error.message);
+            console.error('Failed to initialize modules:', error.message);
             throw error;
         }
 
@@ -147,7 +144,7 @@ class Obfuscator {
         this._configurePlatform();
 
         // Initialize keys
-        if (this.modules.keyGenerator) {
+        if (this.modules.keyGenerator && this.modules.keyGenerator.initSession) {
             this.modules.keyGenerator.initSession();
         }
 
@@ -162,6 +159,7 @@ class Obfuscator {
             vmInstructions: 0,
             vmConstants: 0,
             processingTime: 0,
+            ratio: 0,
             startTime: Date.now()
         };
 
@@ -170,24 +168,20 @@ class Obfuscator {
     }
 
     /**
-     * Get compression level based on complexity
+     * Get compression level
      */
     _getCompressionLevel() {
-        const levels = {
-            'low': 1,
-            'medium': 3,
-            'high': 5,
-            'extreme': 7
-        };
+        const levels = { 'low': 1, 'medium': 3, 'high': 5, 'extreme': 7 };
         return levels[this.config.vmComplexity] || 3;
     }
 
     /**
-     * Configure platform-specific settings
+     * Configure platform
      */
     _configurePlatform() {
-        const platformConfig = Config.PlatformSettings ? Config.PlatformSettings[this.config.target] : null;
+        if (!Config || !Config.PlatformSettings) return;
         
+        const platformConfig = Config.PlatformSettings[this.config.target];
         if (platformConfig && platformConfig.globals && this.modules.renamer) {
             this.modules.renamer.addBuiltIn(platformConfig.globals);
         }
@@ -215,50 +209,47 @@ class Obfuscator {
      * Main obfuscate function
      */
     async obfuscate(code, options = {}) {
-        // Initialize
         this.init(options);
         
         this.stats.inputSize = Buffer.byteLength(code, 'utf-8');
         
-        logger.obfuscate(`Starting obfuscation...`);
-        logger.obfuscate(`Target: ${this.config.target}`);
-        logger.obfuscate(`VM Complexity: ${this.config.vmComplexity}`);
-        logger.obfuscate(`Features: ${this._getEnabledFeatures().join(', ')}`);
+        if (logger && logger.obfuscate) {
+            logger.obfuscate(`Starting obfuscation...`);
+            logger.obfuscate(`Target: ${this.config.target}`);
+            logger.obfuscate(`VM Complexity: ${this.config.vmComplexity}`);
+            logger.obfuscate(`Luraph Style: ${this.config.luraphStyle}`);
+            logger.obfuscate(`Features: ${this._getEnabledFeatures().join(', ')}`);
+        }
 
         try {
             let result = code;
 
             // ═══════════════════════════════════════════════════════════
-            // PHASE 1: Parse & Analyze (optional)
+            // PHASE 1: Parse & Analyze
             // ═══════════════════════════════════════════════════════════
             let analysis = null;
             if (this.modules.parser) {
-                logger.debugLog('Phase 1: Parsing code...');
                 try {
                     const parseResult = this.modules.parser.analyze(result);
                     if (parseResult && parseResult.success) {
                         analysis = parseResult.analysis;
                     }
-                } catch (e) {
-                    logger.debugLog('Parse failed, using regex-based approach');
-                }
+                } catch (e) { /* Skip */ }
             }
 
             // ═══════════════════════════════════════════════════════════
             // PHASE 2: Variable Renaming
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.variableRenaming && this.modules.renamer) {
-                logger.debugLog('Phase 2: Renaming variables...');
                 result = this.modules.renamer.rename(result);
-                const renamerStats = this.modules.renamer.getStats();
-                this.stats.variablesRenamed = renamerStats ? renamerStats.renamed || 0 : 0;
+                const stats = this.modules.renamer.getStats ? this.modules.renamer.getStats() : {};
+                this.stats.variablesRenamed = stats.renamed || 0;
             }
 
             // ═══════════════════════════════════════════════════════════
             // PHASE 3: String Encryption
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.stringEncryption && this.modules.stringEncryptor) {
-                logger.debugLog('Phase 3: Encrypting strings...');
                 result = this._encryptStrings(result);
             }
 
@@ -266,7 +257,6 @@ class Obfuscator {
             // PHASE 4: Constant Encryption
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.constantEncryption && this.modules.constantEncryptor) {
-                logger.debugLog('Phase 4: Encrypting constants...');
                 result = this._encryptConstants(result);
             }
 
@@ -274,7 +264,6 @@ class Obfuscator {
             // PHASE 5: Control Flow
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.controlFlow && this.modules.controlFlow) {
-                logger.debugLog('Phase 5: Obfuscating control flow...');
                 result = this.modules.controlFlow.obfuscate(result);
             }
 
@@ -282,81 +271,55 @@ class Obfuscator {
             // PHASE 6: Junk Code
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.junkCode && this.modules.junkGenerator) {
-                logger.debugLog('Phase 6: Injecting junk code...');
                 result = this.modules.junkGenerator.inject(result);
-                const junkStats = this.modules.junkGenerator.getStats();
-                this.stats.junkInjected = junkStats ? junkStats.injected || 0 : 0;
+                const stats = this.modules.junkGenerator.getStats ? this.modules.junkGenerator.getStats() : {};
+                this.stats.junkInjected = stats.injected || 0;
             }
 
             // ═══════════════════════════════════════════════════════════
-            // PHASE 7: Security Features (Pre-VM)
+            // PHASE 7: Security Features
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.environmentCheck && this.modules.environmentChecker) {
-                logger.debugLog('Phase 7a: Adding environment checks...');
                 const envCode = this.modules.environmentChecker.generate();
-                if (envCode) {
-                    result = envCode + '\n' + result;
-                }
+                if (envCode) result = envCode + '\n' + result;
             }
 
             if (this.config.features.integrityCheck && this.modules.integrityChecker) {
-                logger.debugLog('Phase 7b: Adding integrity checks...');
-                const integrityResult = this.modules.integrityChecker.generate(result);
-                if (integrityResult && integrityResult.wrappedCode) {
-                    result = integrityResult.wrappedCode;
-                }
+                const intResult = this.modules.integrityChecker.generate(result);
+                if (intResult && intResult.wrappedCode) result = intResult.wrappedCode;
             }
 
             // ═══════════════════════════════════════════════════════════
-            // PHASE 8: VM Obfuscation (CORE)
+            // PHASE 8: VM Obfuscation (CORE - Luraph Style)
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.vmObfuscation && this.modules.vmObfuscator) {
-                logger.debugLog('Phase 8: Applying VM obfuscation...');
-                logger.debugLog(`  - Complexity: ${this.config.vmComplexity}`);
-                logger.debugLog(`  - Multi-layer: ${this.config.multiLayerVM}`);
-                
                 try {
                     // Generate bytecode untuk stats
                     if (this.modules.bytecodeGenerator) {
                         const bytecode = this.modules.bytecodeGenerator.generate(result);
                         this.stats.vmInstructions = bytecode.instructions ? bytecode.instructions.length : 0;
                         this.stats.vmConstants = bytecode.constants ? bytecode.constants.length : 0;
-                        
-                        // Transform dengan VM Obfuscator
-                        const transformed = this.modules.vmObfuscator.transform(result, {
-                            analysis: analysis,
-                            bytecode: bytecode
-                        });
-                        
-                        if (transformed && typeof transformed === 'string') {
-                            result = transformed;
-                        }
-                    } else {
-                        // Fallback tanpa bytecode generator
-                        const vmResult = this.modules.vmObfuscator.obfuscate(result);
-                        if (vmResult && vmResult.success && vmResult.code) {
-                            result = vmResult.code;
-                        }
                     }
+
+                    // Transform dengan VM Obfuscator (Luraph style)
+                    const vmResult = this.modules.vmObfuscator.obfuscate(result);
                     
-                    logger.debugLog(`  - Instructions: ${this.stats.vmInstructions}`);
-                    logger.debugLog(`  - Constants: ${this.stats.vmConstants}`);
+                    if (vmResult && vmResult.success && vmResult.code) {
+                        result = vmResult.code;
+                    } else {
+                        // Fallback
+                        result = this.modules.vmObfuscator.transform(result, { analysis });
+                    }
                 } catch (vmError) {
-                    logger.error('VM obfuscation failed, using fallback:', vmError.message);
-                    // Fallback ke simple wrapper
-                    result = this._fallbackVMWrapper(result);
+                    console.error('VM obfuscation error:', vmError.message);
+                    result = this._fallbackWrapper(result);
                 }
-            } else if (this.modules.vmTemplate) {
-                // Simple wrapper tanpa full VM jika VM disabled
-                logger.debugLog('Phase 8: Applying simple wrapper...');
-                result = this._simpleWrapper(result);
             }
 
             // ═══════════════════════════════════════════════════════════
             // PHASE 9: Watermark
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.watermark && this.modules.watermarkGenerator) {
-                logger.debugLog('Phase 9: Adding watermark...');
                 result = this.modules.watermarkGenerator.apply(result, 'top');
             }
 
@@ -364,19 +327,18 @@ class Obfuscator {
             // PHASE 10: Minify
             // ═══════════════════════════════════════════════════════════
             if (this.config.features.minify && this.modules.minifier) {
-                logger.debugLog('Phase 10: Minifying...');
                 result = this.modules.minifier.minify(result);
             }
 
-            // Calculate final stats
+            // Calculate stats
             this.stats.outputSize = Buffer.byteLength(result, 'utf-8');
             this.stats.endTime = Date.now();
             this.stats.processingTime = this.stats.endTime - this.stats.startTime;
-            this.stats.ratio = Math.round((this.stats.outputSize / this.stats.inputSize) * 100);
+            this.stats.ratio = Math.round((this.stats.outputSize / this.stats.inputSize) * 100) / 100;
 
-            logger.obfuscate(`Completed in ${this.stats.processingTime}ms`);
-            logger.obfuscate(`Size: ${this.stats.inputSize}b → ${this.stats.outputSize}b (${this.stats.ratio}%)`);
-            if (this.stats.vmInstructions > 0) {
+            if (logger && logger.obfuscate) {
+                logger.obfuscate(`Completed in ${this.stats.processingTime}ms`);
+                logger.obfuscate(`Size: ${this.stats.inputSize}b → ${this.stats.outputSize}b (${this.stats.ratio}x)`);
                 logger.obfuscate(`VM: ${this.stats.vmInstructions} instructions, ${this.stats.vmConstants} constants`);
             }
 
@@ -387,62 +349,39 @@ class Obfuscator {
             };
 
         } catch (error) {
-            logger.error('Obfuscation failed:', error.message);
-            console.error(error);
+            console.error('Obfuscation failed:', error.message);
             throw error;
         }
     }
 
     /**
-     * Fallback VM wrapper jika VM obfuscation gagal
+     * Fallback wrapper (Delta compatible)
      */
-    _fallbackVMWrapper(code) {
-        const wrapperVar = this.modules.random.generateName(3);
-        const funcVar = this.modules.random.generateName(3);
-        const envVar = this.modules.random.generateName(2);
+    _fallbackWrapper(code) {
+        const r = this.modules.random;
+        const wrapVar = r.generateName(2);
+        const envVar = r.generateName(1);
+        const funcVar = r.generateName(2);
 
-        return `
-do
-    local ${envVar} = getfenv and getfenv() or _ENV or _G
-    local ${wrapperVar} = function()
-        ${code}
-    end
-    local ${funcVar} = setfenv and setfenv(${wrapperVar}, ${envVar}) or ${wrapperVar}
-    ${funcVar}()
-end
-`.trim();
+        return `return(function(...)` +
+            `local ${envVar}=getfenv and getfenv()or _ENV or _G;` +
+            `local ${funcVar}=function()${code}end;` +
+            `return(setfenv and setfenv(${funcVar},${envVar})or ${funcVar})();` +
+            `end)(...)`;
     }
 
     /**
-     * Simple wrapper tanpa VM
-     */
-    _simpleWrapper(code) {
-        const wrapperVar = this.modules.random.generateName(3);
-        const checkVar = this.modules.random.generateName(2);
-
-        return `
-do
-    local ${checkVar} = function() return true end
-    if ${checkVar}() then
-        local ${wrapperVar} = function()
-            ${code}
-        end
-        ${wrapperVar}()
-    end
-end
-`.trim();
-    }
-
-    /**
-     * Encrypt strings in code
+     * Encrypt strings
      */
     _encryptStrings(code) {
+        if (!this.modules.stringEncryptor) return code;
+
         let result = code;
-        const stringRegex = /(["'])(?:(?!\1|\\).|\\.)*\1/g;
+        const regex = /(["'])(?:(?!\1|\\).|\\.)*\1/g;
         const matches = [];
         let match;
 
-        while ((match = stringRegex.exec(code)) !== null) {
+        while ((match = regex.exec(code)) !== null) {
             matches.push({
                 original: match[0],
                 content: match[0].slice(1, -1),
@@ -451,18 +390,12 @@ end
             });
         }
 
-        // Replace dari belakang
         for (let i = matches.length - 1; i >= 0; i--) {
             const m = matches[i];
-            
-            // Skip empty strings dan strings pendek
             if (m.content.length < 2) continue;
-            
-            // Skip escape sequences yang kompleks
             if (m.content.includes('\\x') || m.content.includes('\\u')) continue;
-            
+
             try {
-                // Unescape string content
                 let unescaped = m.content
                     .replace(/\\n/g, '\n')
                     .replace(/\\r/g, '\r')
@@ -470,40 +403,40 @@ end
                     .replace(/\\"/g, '"')
                     .replace(/\\'/g, "'")
                     .replace(/\\\\/g, '\\');
-                
+
                 const encrypted = this.modules.stringEncryptor.encrypt(unescaped);
                 if (encrypted) {
                     result = result.slice(0, m.index) + encrypted + result.slice(m.index + m.original.length);
                     this.stats.stringsEncrypted++;
                 }
-            } catch (e) {
-                // Skip jika encryption gagal
-            }
+            } catch (e) { /* Skip */ }
         }
 
         return result;
     }
 
     /**
-     * Encrypt constants in code
+     * Encrypt constants
      */
     _encryptConstants(code) {
-        let result = code;
+        if (!this.modules.constantEncryptor) return code;
 
-        // Encrypt numbers (dengan batasan)
+        let result = code;
+        const r = this.modules.random;
+
+        // Numbers
         result = result.replace(/(?<![a-zA-Z_\d.])(\d+)(?![a-zA-Z_\d.])/g, (match, num) => {
             const n = parseInt(num);
-            // Skip numbers yang terlalu besar atau dalam konteks tertentu
-            if (n >= 0 && n <= 100000 && this.modules.random.bool(0.6)) {
+            if (n >= 0 && n <= 100000 && r.bool(0.6)) {
                 this.stats.constantsEncrypted++;
                 return this.modules.constantEncryptor.encryptNumber(n);
             }
             return match;
         });
 
-        // Encrypt booleans (dengan probability)
+        // Booleans
         result = result.replace(/\btrue\b/g, () => {
-            if (this.modules.random.bool(0.7)) {
+            if (r.bool(0.7)) {
                 this.stats.constantsEncrypted++;
                 return this.modules.constantEncryptor.encryptBoolean(true);
             }
@@ -511,7 +444,7 @@ end
         });
 
         result = result.replace(/\bfalse\b/g, () => {
-            if (this.modules.random.bool(0.7)) {
+            if (r.bool(0.7)) {
                 this.stats.constantsEncrypted++;
                 return this.modules.constantEncryptor.encryptBoolean(false);
             }
@@ -539,85 +472,31 @@ end
         }
 
         const errors = [];
-        
-        // Check balanced blocks
         const opens = (code.match(/\b(function|do|if|while|for|repeat)\b/g) || []).length;
         const closes = (code.match(/\b(end|until)\b/g) || []).length;
 
         if (Math.abs(opens - closes) > 3) {
-            errors.push(`Possibly unbalanced blocks: ${opens} openers, ${closes} closers`);
-        }
-
-        // Check for syntax errors menggunakan parser
-        if (this.modules.parser) {
-            try {
-                const parseResult = this.modules.parser.validate(code);
-                if (parseResult && !parseResult.valid) {
-                    errors.push(parseResult.error);
-                }
-            } catch (e) {
-                // Parser error, skip validation
-            }
+            errors.push(`Unbalanced blocks: ${opens} openers, ${closes} closers`);
         }
 
         return { valid: errors.length === 0, errors };
     }
 
     /**
-     * Get features
+     * Get features info
      */
     static getFeatures() {
         return {
-            vmObfuscation: { 
-                name: 'VM Obfuscation', 
-                emoji: '🔀', 
-                description: 'Convert code to Virtual Machine bytecode' 
-            },
-            stringEncryption: { 
-                name: 'String Encryption', 
-                emoji: '🔐', 
-                description: 'Encrypt all strings with XOR/Custom encoding' 
-            },
-            controlFlow: { 
-                name: 'Control Flow', 
-                emoji: '🌀', 
-                description: 'Flatten and obfuscate control flow' 
-            },
-            junkCode: { 
-                name: 'Junk Code', 
-                emoji: '🗑️', 
-                description: 'Inject dead code and fake branches' 
-            },
-            variableRenaming: { 
-                name: 'Variable Renaming', 
-                emoji: '📝', 
-                description: 'Rename variables (Luraph style: d, Q, FU, etc)' 
-            },
-            constantEncryption: { 
-                name: 'Constant Encryption', 
-                emoji: '🔢', 
-                description: 'Obfuscate numbers and booleans' 
-            },
-            integrityCheck: { 
-                name: 'Integrity Check', 
-                emoji: '✅', 
-                description: 'Detect code tampering' 
-            },
-            environmentCheck: { 
-                name: 'Environment Check', 
-                emoji: '🛡️', 
-                description: 'Anti-debug and environment validation' 
-            },
-            watermark: { 
-                name: 'Watermark', 
-                emoji: '💧', 
-                description: 'Add custom watermark to output' 
-            },
-            minify: { 
-                name: 'Minify Output', 
-                emoji: '📦', 
-                description: 'Compress and minify final output' 
-            }
+            vmObfuscation: { name: 'VM Obfuscation', emoji: '🔀', description: 'Luraph-style VM bytecode protection' },
+            stringEncryption: { name: 'String Encryption', emoji: '🔐', description: 'XOR encrypted strings' },
+            controlFlow: { name: 'Control Flow', emoji: '🌀', description: 'Control flow flattening' },
+            junkCode: { name: 'Junk Code', emoji: '🗑️', description: 'Dead code injection' },
+            variableRenaming: { name: 'Variable Renaming', emoji: '📝', description: 'Luraph-style naming' },
+            constantEncryption: { name: 'Constant Encryption', emoji: '🔢', description: 'Number/boolean obfuscation' },
+            integrityCheck: { name: 'Integrity Check', emoji: '✅', description: 'Anti-tamper protection' },
+            environmentCheck: { name: 'Environment Check', emoji: '🛡️', description: 'Anti-debug checks' },
+            watermark: { name: 'Watermark', emoji: '💧', description: 'Custom watermark' },
+            minify: { name: 'Minify', emoji: '📦', description: 'Code minification' }
         };
     }
 
@@ -629,112 +508,38 @@ end
     }
 
     /**
-     * Reset all modules
+     * Reset
      */
     reset() {
-        if (this.modules.random && this.modules.random.resetNames) {
-            this.modules.random.resetNames();
-        }
-        if (this.modules.renamer && this.modules.renamer.reset) {
-            this.modules.renamer.reset();
-        }
-        if (this.modules.junkGenerator && this.modules.junkGenerator.reset) {
-            this.modules.junkGenerator.reset();
-        }
-        if (this.modules.controlFlow && this.modules.controlFlow.reset) {
-            this.modules.controlFlow.reset();
-        }
-        if (this.modules.vmObfuscator && this.modules.vmObfuscator.reset) {
-            this.modules.vmObfuscator.reset();
-        }
-        if (this.modules.stringEncryptor && this.modules.stringEncryptor.reset) {
-            this.modules.stringEncryptor.reset();
-        }
-        if (this.modules.keyGenerator && this.modules.keyGenerator.reset) {
-            this.modules.keyGenerator.reset();
-        }
-        if (this.modules.bytecodeGenerator && this.modules.bytecodeGenerator.reset) {
-            this.modules.bytecodeGenerator.reset();
-        }
-        if (this.modules.vmTemplate && this.modules.vmTemplate.reset) {
-            this.modules.vmTemplate.reset();
-        }
+        const modules = this.modules;
+        if (modules.random && modules.random.resetNames) modules.random.resetNames();
+        if (modules.renamer && modules.renamer.reset) modules.renamer.reset();
+        if (modules.junkGenerator && modules.junkGenerator.reset) modules.junkGenerator.reset();
+        if (modules.controlFlow && modules.controlFlow.reset) modules.controlFlow.reset();
+        if (modules.vmObfuscator && modules.vmObfuscator.reset) modules.vmObfuscator.reset();
+        if (modules.stringEncryptor && modules.stringEncryptor.reset) modules.stringEncryptor.reset();
+        if (modules.keyGenerator && modules.keyGenerator.reset) modules.keyGenerator.reset();
+        if (modules.bytecodeGenerator && modules.bytecodeGenerator.reset) modules.bytecodeGenerator.reset();
+        if (modules.vmTemplate && modules.vmTemplate.reset) modules.vmTemplate.reset();
         
         this.stats = {};
         this.initialized = false;
     }
 }
 
-// ═══════════════════════════════════════════════════════════
-// EXPORTS
-// ═══════════════════════════════════════════════════════════
-
-// Singleton instance
-const obfuscatorInstance = new Obfuscator();
+// Singleton
+const instance = new Obfuscator();
 
 module.exports = {
-    /**
-     * Main obfuscate function
-     */
-    obfuscate: async (code, options) => {
-        return obfuscatorInstance.obfuscate(code, options);
-    },
-
-    /**
-     * Validate code
-     */
-    validateCode: (code) => {
-        obfuscatorInstance.init({});
-        return obfuscatorInstance.validateCode(code);
-    },
-
-    /**
-     * Get available features
-     */
-    getFeatures: () => {
-        return Obfuscator.getFeatures();
-    },
-
-    /**
-     * Obfuscator class for custom usage
-     */
+    obfuscate: async (code, options) => instance.obfuscate(code, options),
+    validateCode: (code) => { instance.init({}); return instance.validateCode(code); },
+    getFeatures: () => Obfuscator.getFeatures(),
     Obfuscator,
-
-    /**
-     * Individual modules for advanced usage
-     */
     modules: {
-        // Parser
-        LuaParser,
-        
-        // Encryption
-        StringEncryptor,
-        ConstantEncryptor,
-        KeyGenerator,
-        
-        // Transforms
-        Renamer,
-        JunkGenerator,
-        ControlFlowObfuscator,
-        VMObfuscator,
-        
-        // VM Core
-        BytecodeGenerator,
-        VMTemplate,
-        
-        // VM Optional
-        VMCompiler,
-        VMShuffler,
-        OpcodeManager,
-        
-        // Security
-        IntegrityChecker,
-        EnvironmentChecker,
-        WatermarkGenerator,
-        
-        // Output
-        OutputGenerator,
-        Minifier,
-        Serializer
+        LuaParser, StringEncryptor, ConstantEncryptor, KeyGenerator,
+        Renamer, JunkGenerator, ControlFlowObfuscator, VMObfuscator,
+        BytecodeGenerator, VMTemplate, VMCompiler, VMShuffler, OpcodeManager,
+        IntegrityChecker, EnvironmentChecker, WatermarkGenerator,
+        OutputGenerator, Minifier, Serializer
     }
 };
