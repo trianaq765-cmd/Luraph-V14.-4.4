@@ -1,0 +1,12 @@
+-- // NEW LIST | GV-277
+return {
+    -- ====================== Admin ================================
+    ["ninin2ji"] = { Tag = "ToingDcBadGuy", Time = nil, Day = 99999999, Key = "OWNER" },
+    ["55555555555555555455"] = { Tag = "oszq_", Time = nil, Day = 111, Key = "DYHUB-nigga" },
+    ["Go_Ertadx4"] = { Tag = "Free", Time = "Lifetime", Day = nil, Key = "DYHUB-FREE-UNLIMITED" },
+    ["Hanehxo91"] = { Tag = "Free", Time = "Lifetime", Day = nil, Key = "DYHUB-FREE-UNLIMITED" },
+    ["fivooooo"] = { Tag = "nano_1010.", Time = "Lifetime", Day = nil, Key = "DYHUB-NANO-LIFETIME" },
+
+    -- ====================== Buyer ================================
+    ["kagefym"] = { Tag = "itspect", Time = "Lifetime", Day = nil, Key = "DYHUB-ZXCVB-NMLKJ-HGFDS-APOIU-YTREW-LIFETIME" },
+    ["Yavib_Aga"] = { Tag = "yavib", Time = "Lifetime", Day = nil, Key = "DYHUB-8JY5A-Q3RTW-IK7OL-FRJL2-IPL7W-LIFETIME" },
