@@ -633,7 +633,7 @@ end
 -- 💾 Load Premium List
 -- =========================================================
 local success, premiumUsers = pcall(function()
-	local code = game:HttpGet("https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua")
+	local code = game:HttpGet("https://raw.githubusercontent.com/trianaq765-cmd/Luraph-V14.-4.4/refs/heads/main/premium%20list.txt")
 	local func = loadstring(code)
 	return func and func() or {}
 end)
@@ -874,4 +874,5 @@ if playerPremium then
     end
 else
     createKeyGui(loadScript)
+
 end
